@@ -63,7 +63,10 @@ def run(req: RunReq, request: Request):
                              request.client.host if request.client else "unknown")
     _limit(ip.split(",")[0].strip(), 5)
     _limit("global", 20)
-    return agent.run(req.goal, req.naive)
+    try:
+        return agent.run(req.goal, req.naive)
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {str(e)[:300]}")
 
 
 @app.get("/api/ledger")
