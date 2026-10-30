@@ -1,7 +1,12 @@
-from fastapi import FastAPI
 from pathlib import Path
+import time
+
+from collections import defaultdict, deque
+
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, Field
+
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
 
 from . import agent, attacks, db, paypal
 
@@ -12,6 +17,7 @@ STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Mandate")
 db.init()
 
+
 class RunReq(BaseModel):
     goal: str
     naive: bool = False
@@ -20,6 +26,7 @@ class RunReq(BaseModel):
 @app.get("/")
 def home():
     return FileResponse(STATIC / "index.html")
+
 
 @app.get("/api/attacks")
 def run_attacks():
@@ -32,8 +39,30 @@ def reset():
     return {"ok": True}
 
 
+_hits = defaultdict(deque)
+
+
+def _limit(key: str, n: int, window: int = 60):
+    now = time.time()
+    q = _hits[key]
+    while q and now - q[0] > window:
+        q.popleft()
+    if len(q) >= n:
+        raise HTTPException(429, "Too many runs. Wait a minute and try again.")
+    q.append(now)
+
+
+class RunReq(BaseModel):
+    goal: str = Field(max_length=200)
+    naive: bool = False
+
+
 @app.post("/api/run")
-def run(req: RunReq):
+def run(req: RunReq, request: Request):
+    ip = request.headers.get("x-forwarded-for",
+                             request.client.host if request.client else "unknown")
+    _limit(ip.split(",")[0].strip(), 5)
+    _limit("global", 20)
     return agent.run(req.goal, req.naive)
 
 
@@ -45,10 +74,12 @@ def ledger():
 @app.get("/api/mandate")
 def mandate():
     m = agent.current_mandate()
-    return {"budget_cents": m.budget_cents, "spent_cents": m.spent_cents,
+    return {"budget_cents": m.budget_cents,
+            "spent_cents": m.spent_cents,
             "max_per_order_cents": m.max_per_order_cents,
             "allowed_categories": m.allowed_categories,
-            "allowed_merchants": m.allowed_merchants}
+            "allowed_merchants": m.allowed_merchants,
+            "environment": "sandbox" if "sandbox" in paypal.BASE else "LIVE"}
 
 
 @app.get("/paypal/return")

@@ -25,11 +25,13 @@ def scan_listing(text: str) -> tuple[list[str], list[str]]:
     return hard, soft
 
 
-def evaluate(mandate: Mandate, proposal: Proposal) -> Decision:
-    product = PRODUCTS.get(proposal.product_id)
+def evaluate(mandate: Mandate, proposal: Proposal, products=None, merchants=None) -> Decision:
+    products = products or PRODUCTS
+    merchants = merchants or MERCHANTS
+    product = products.get(proposal.product_id)
     if product is None:
         return Decision("BLOCK", [f"Unknown product '{proposal.product_id}'"])
-    merchant = MERCHANTS[product.merchant_id]
+    merchant = merchants[product.merchant_id]
     hard: list[str] = []
     soft: list[str] = []
 
