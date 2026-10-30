@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
-from . import agent, db, paypal
+from . import agent, attacks, db, paypal
 
 
 
@@ -20,6 +20,10 @@ class RunReq(BaseModel):
 @app.get("/")
 def home():
     return FileResponse(STATIC / "index.html")
+
+@app.get("/api/attacks")
+def run_attacks():
+    return attacks.run_lab()
 
 
 @app.post("/api/reset")
