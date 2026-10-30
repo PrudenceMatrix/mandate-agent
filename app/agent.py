@@ -1,4 +1,7 @@
-import json, os, re
+import json
+import os
+import re
+import time
 from dataclasses import replace
 
 import requests
@@ -76,18 +79,34 @@ def propose(goal: str, args: dict):
              "total_usd": d.total_cents / 100})
 
 
+class LLMUnavailable(RuntimeError):
+    pass
+
+
 def _llm(messages):
-    r = requests.post(f"{os.environ['LLM_BASE_URL'].rstrip('/')}/chat/completions",
-                      headers={"Authorization": f"Bearer {os.environ['LLM_API_KEY']}"},
-                      json={"model": os.environ["LLM_MODEL"], "messages": messages,
-                            "tools": TOOLS, "tool_choice": "auto", "temperature": 0},
-                      timeout=90)
+    url = f"{os.environ['LLM_BASE_URL'].rstrip('/')}/chat/completions"
+    payload = {"model": os.environ["LLM_MODEL"], "messages": messages,
+               "tools": TOOLS, "tool_choice": "auto", "temperature": 0}
+    headers = {"Authorization": f"Bearer {os.environ['LLM_API_KEY']}"}
+    r = None
+    for attempt in range(3):
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=60)
+        except requests.RequestException as e:
+            raise LLMUnavailable(f"LLM unreachable: {e}")
+        daily = r.status_code == 429 and "perday" in r.text.lower().replace(" ", "")
+        if r.status_code == 429 and not daily and attempt < 2:
+            time.sleep(5 * (attempt + 1))
+            continue
+        break
+    if r.status_code == 429 or r.status_code >= 500:
+        raise LLMUnavailable(f"LLM unavailable ({r.status_code})")
     if not r.ok:
         raise RuntimeError(f"LLM error {r.status_code}: {r.text[:300]}")
     return r.json()["choices"][0]["message"]
 
 
-def run(goal: str, naive: bool = False):
+def _run_llm(goal: str, naive: bool = False):
     messages = [{"role": "system", "content": NAIVE if naive else HARDENED},
                 {"role": "user", "content": goal}]
     trace, order, reply = [], None, ""
@@ -117,3 +136,34 @@ def run(goal: str, naive: bool = False):
             reply = "Order created. Approve it in PayPal to complete the payment."
             break
     return {"reply": reply, "trace": trace, "order": order}
+
+
+STOP = {"buy", "get", "the", "for", "and", "cheapest", "best", "find",
+        "please", "with", "some", "need", "want"}
+
+
+def _run_fallback(goal: str):
+    words = [w for w in re.findall(r"[a-z0-9]+", goal.lower()) if w not in STOP]
+    query = " ".join(words) or goal
+    hits = search(query)
+    trace = [{"tool": "search_catalog", "args": {"query": query}, "result": hits}]
+    order = None
+    for h in hits:
+        args = {"product_id": h["product_id"], "quantity": 1,
+                "claimed_total_usd": h["price_usd"]}
+        result, made = propose(goal, args)
+        trace.append({"tool": "propose_purchase", "args": args, "result": result})
+        if made:
+            order = made
+            break
+    reply = ("The AI model is unavailable right now (quota or outage), so the built-in "
+             "fallback agent ran instead, cheapest first. The guard and PayPal are still real. "
+             + ("Order created. Approve it in PayPal." if order else "Nothing passed the guard."))
+    return {"reply": reply, "trace": trace, "order": order, "fallback": True}
+
+
+def run(goal: str, naive: bool = False):
+    try:
+        return _run_llm(goal, naive)
+    except LLMUnavailable:
+        return _run_fallback(goal)

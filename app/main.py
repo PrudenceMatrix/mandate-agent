@@ -1,43 +1,17 @@
-from pathlib import Path
 import time
-
 from collections import defaultdict, deque
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
-from fastapi.responses import FileResponse, RedirectResponse
-
 from . import agent, attacks, db, paypal
-
-
 
 STATIC = Path(__file__).parent / "static"
 
 app = FastAPI(title="Mandate")
 db.init()
-
-
-class RunReq(BaseModel):
-    goal: str
-    naive: bool = False
-
-
-@app.get("/")
-def home():
-    return FileResponse(STATIC / "index.html")
-
-
-@app.get("/api/attacks")
-def run_attacks():
-    return attacks.run_lab()
-
-
-@app.post("/api/reset")
-def reset():
-    db.reset()
-    return {"ok": True}
-
 
 _hits = defaultdict(deque)
 
@@ -55,6 +29,22 @@ def _limit(key: str, n: int, window: int = 60):
 class RunReq(BaseModel):
     goal: str = Field(max_length=200)
     naive: bool = False
+
+
+@app.get("/")
+def home():
+    return FileResponse(STATIC / "index.html")
+
+
+@app.get("/api/attacks")
+def run_attacks():
+    return attacks.run_lab()
+
+
+@app.post("/api/reset")
+def reset():
+    db.reset()
+    return {"ok": True}
 
 
 @app.post("/api/run")
