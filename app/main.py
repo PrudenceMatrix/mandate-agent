@@ -1,12 +1,16 @@
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from pathlib import Path
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 from . import agent, db, paypal
 
+
+
+STATIC = Path(__file__).parent / "static"
+
 app = FastAPI(title="Mandate")
 db.init()
-
 
 class RunReq(BaseModel):
     goal: str
@@ -15,7 +19,13 @@ class RunReq(BaseModel):
 
 @app.get("/")
 def home():
-    return {"app": "Mandate", "status": "running"}
+    return FileResponse(STATIC / "index.html")
+
+
+@app.post("/api/reset")
+def reset():
+    db.reset()
+    return {"ok": True}
 
 
 @app.post("/api/run")

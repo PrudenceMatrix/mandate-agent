@@ -48,3 +48,7 @@ def spent_cents():
     with _c() as c:
         return c.execute("SELECT COALESCE(SUM(total_cents),0) FROM ledger "
                          "WHERE status='CAPTURED'").fetchone()[0]
+
+def reset():
+    with _c() as c:
+        c.execute("DELETE FROM ledger")

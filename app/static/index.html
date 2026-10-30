@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mandate: a guarded AI shopping agent for PayPal</title>
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33/dist/ag-grid-community.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --line: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --green: #3fb950;
+            --red: #f85149;
+            --amber: #d29922;
+            --blue: #2f81f7
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 15px/1.5 system-ui, Segoe UI, sans-serif
+        }
+
+        main {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px 16px 48px
+        }
+
+        h1 {
+            margin: 0 0 4px;
+            font-size: 26px
+        }
+
+        .sub {
+            color: var(--muted);
+            margin: 0 0 20px
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center
+        }
+
+        input[type=text] {
+            flex: 1;
+            min-width: 240px;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px
+        }
+
+        button {
+            background: var(--blue);
+            color: #fff;
+            border: 0;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-weight: 600;
+            cursor: pointer
+        }
+
+        button.ghost {
+            background: transparent;
+            border: 1px solid var(--line);
+            color: var(--muted)
+        }
+
+        button:disabled {
+            opacity: .5;
+            cursor: wait
+        }
+
+        .bar {
+            height: 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0
+        }
+
+        .bar>i {
+            display: block;
+            height: 100%;
+            background: var(--green)
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 99px;
+            font-size: 12px;
+            font-weight: 700
+        }
+
+        .ALLOW,
+        .CAPTURED {
+            background: #12361f;
+            color: var(--green)
+        }
+
+        .BLOCK,
+        .BLOCKED,
+        .FAILED {
+            background: #3d1417;
+            color: var(--red)
+        }
+
+        .REVIEW,
+        .PENDING_APPROVAL,
+        .CANCELLED {
+            background: #3b2e0b;
+            color: var(--amber)
+        }
+
+        .step {
+            border-left: 3px solid var(--line);
+            padding: 6px 12px;
+            margin: 8px 0
+        }
+
+        .step.BLOCK {
+            border-color: var(--red)
+        }
+
+        .step.ALLOW,
+        .step.REVIEW {
+            border-color: var(--green)
+        }
+
+        .muted {
+            color: var(--muted)
+        }
+
+        .banner {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: 600
+        }
+
+        #grid {
+            height: 340px;
+            margin-top: 10px
+        }
+
+        ul {
+            margin: 4px 0 0 18px;
+            padding: 0
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <h1>Mandate</h1>
+        <p class="sub">An AI shopping agent that can pay through PayPal, but can't be tricked into overspending.</p>
+        <div id="banner"></div>
+        <div class="card" id="mandate"></div>
+        <div class="card">
+            <div class="row">
+                <input type="text" id="goal" value="Buy me the cheapest laptop stand">
+                <label class="muted"><input type="checkbox" id="naive" checked> Naive agent (no injection
+                    defences)</label>
+                <button id="run">Run agent</button>
+            </div>
+            <div id="out"></div>
+        </div>
+        <div class="card">
+            <div class="row" style="justify-content:space-between">
+                <b>Guard ledger</b><button class="ghost" id="reset">Reset demo</button>
+            </div>
+            <div id="grid"></div>
+        </div>
+    </main>
+    <script>
+        const $ = id => document.getElementById(id);
+        const usd = c => '$' + (c / 100).toFixed(2);
+        function el(tag, cls, text) {
+            const e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text !== undefined) e.textContent = text;
+            return e;
+        }
+        async function api(path, opts) {
+            const r = await fetch(path, opts);
+            if (!r.ok) throw new Error(path + ' -> ' + r.status + ' ' + (await r.text()).slice(0, 300));
+            return r.json();
+        }
+
+        if (agGrid.ModuleRegistry && agGrid.AllCommunityModule)
+            agGrid.ModuleRegistry.registerModules([agGrid.AllCommunityModule]);
+        const theme = agGrid.themeQuartz && agGrid.colorSchemeDark
+            ? agGrid.themeQuartz.withPart(agGrid.colorSchemeDark) : undefined;
+        const badge = p => el('span', 'badge ' + p.value, p.value);
+        const joined = p => (p.value || []).join(' | ');
+
+        const gridApi = agGrid.createGrid($('grid'), {
+            theme, rowData: [], tooltipShowDelay: 200,
+            defaultColDef: { sortable: true, resizable: true },
+            columnDefs: [
+                { field: 'ts', headerName: 'Time (UTC)', width: 170, valueFormatter: p => (p.value || '').replace('T', ' ').replace('+00:00', '') },
+                { field: 'product', width: 190 },
+                { field: 'quantity', headerName: 'Qty', width: 80 },
+                { field: 'total_cents', headerName: 'Total', width: 100, valueFormatter: p => usd(p.value || 0) },
+                { field: 'merchant_id', headerName: 'Merchant', width: 120 },
+                { field: 'verdict', width: 110, cellRenderer: badge },
+                { field: 'status', width: 170, cellRenderer: badge },
+                { field: 'reasons', flex: 1, minWidth: 340, valueFormatter: joined, tooltipValueGetter: joined },
+                { field: 'order_id', headerName: 'PayPal order', width: 170 },
+            ],
+        });
+
+        async function refresh() {
+            const [m, rows] = await Promise.all([api('/api/mandate'), api('/api/ledger')]);
+            const box = $('mandate');
+            box.replaceChildren(el('b', null, 'Mandate'),
+                el('div', 'muted', `Budget ${usd(m.budget_cents)} · spent ${usd(m.spent_cents)} · per-order cap ${usd(m.max_per_order_cents)} · categories: ${m.allowed_categories.join(', ')} · merchants: ${m.allowed_merchants.join(', ')}`));
+            const bar = el('div', 'bar'), fill = el('i');
+            fill.style.width = Math.min(100, m.spent_cents / m.budget_cents * 100) + '%';
+            bar.append(fill); box.append(bar);
+            gridApi.setGridOption('rowData', rows);
+        }
+
+        $('run').onclick = async () => {
+            const btn = $('run'), out = $('out');
+            btn.disabled = true;
+            out.replaceChildren(el('p', 'muted', 'Agent is working...'));
+            try {
+                const res = await api('/api/run', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ goal: $('goal').value, naive: $('naive').checked }),
+                });
+                out.replaceChildren();
+                res.trace.forEach(t => {
+                    if (t.tool === 'search_catalog') {
+                        out.append(el('div', 'step muted', `Searched catalog for "${t.args.query}" → ${(t.result || []).length} listings`));
+                        return;
+                    }
+                    const v = t.result.verdict || 'BLOCK', s = el('div', 'step ' + v), h = el('div');
+                    h.append(el('b', null, `Proposed ${t.args.product_id} × ${t.args.quantity} (claimed $${t.args.claimed_total_usd}) `), el('span', 'badge ' + v, v));
+                    s.append(h);
+                    const ul = el('ul');
+                    (t.result.reasons || []).forEach(r => ul.append(el('li', null, r)));
+                    s.append(ul); out.append(s);
+                });
+                if (res.reply) out.append(el('p', null, res.reply));
+                if (res.order) {
+                    const b = el('button', null, `Approve $${res.order.total_usd.toFixed(2)} in PayPal`);
+                    b.onclick = () => { location.href = res.order.approve_url; };
+                    out.append(b);
+                }
+                await refresh();
+            } catch (e) {
+                out.replaceChildren(el('div', 'banner BLOCK', String(e.message)));
+            }
+            btn.disabled = false;
+        };
+
+        $('reset').onclick = async () => {
+            await api('/api/reset', { method: 'POST' });
+            $('out').replaceChildren();
+            await refresh();
+        };
+
+        const msgs = {
+            paid: ['Payment captured in the PayPal sandbox.', 'CAPTURED'],
+            failed: ['Capture failed. Check the ledger.', 'FAILED'],
+            cancelled: ['Payment cancelled.', 'CANCELLED'],
+            unknown_order: ['That order is not in the guard ledger, so it was refused.', 'BLOCKED'],
+        };
+        const q = new URLSearchParams(location.search).get('result');
+        if (msgs[q]) {
+            $('banner').append(el('div', 'banner ' + msgs[q][1], msgs[q][0]));
+            history.replaceState(null, '', '/');
+        }
+        refresh();
+    </script>
+</body>
+
+</html>
