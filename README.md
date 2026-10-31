@@ -7,11 +7,11 @@ Built for the PayPal AI Hackathon.
 |             |                                                                                                |
 | ----------- | ---------------------------------------------------------------------------------------------- |
 | Live demo   | https://mandate-agent-nd4b.onrender.com (free hosting: the first load can take up to a minute) |
-| Demo video  | <YOUTUBE_URL>                                                                                  |
+| Demo video  | https://youtu.be/cbi3U9HmgBI?si=8HqQV36lTCPbMFtW                                               |
 | Source code | https://github.com/PrudenceMatrix/mandate-agent                                                |
 | License     | MIT                                                                                            |
 
-> Everything runs on the **PayPal Sandbox**. No real money moves, and no real card is ever needed.
+> Everything runs on the **PayPal Sandbox**. First run might take up to 50 seconds to load on render
 
 ---
 
