@@ -229,9 +229,15 @@ This is a hackathon prototype, and it is honest about what it is not.
 
 PayPal Orders v2 REST API (sandbox), FastAPI, Python, SQLite, AG Grid Community, an OpenAI-compatible LLM API (tested with Google Gemini), Render, and plain HTML, CSS and JavaScript.
 
+## Sponsor tools
+
+- **AG Grid (Community):** powers the guard ledger and the Attack Lab results grid in `app/static/index.html`.
+- **Render:** hosts the live demo as a Web Service on the free tier.
+
 ## Author
 
 Built by Brian Machayo (PrudenceMatrix) for the PayPal AI Hackathon.
+
 
 ## License
 
