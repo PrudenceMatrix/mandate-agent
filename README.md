@@ -7,7 +7,11 @@ Built for the PayPal AI Hackathon.
 |             |                                                                                                |
 | ----------- | ---------------------------------------------------------------------------------------------- |
 | Live demo   | https://mandate-agent-nd4b.onrender.com (free hosting: the first load can take up to a minute) |
+<<<<<<< HEAD
 | Demo video  | https://youtu.be/cbi3U9HmgBI?si=8HqQV36lTCPbMFtW                                               |
+=======
+| Demo video  | https://youtu.be/cbi3U9HmgBI?si=8HqQV36lTCPbMFtW                                                                                  |
+>>>>>>> 21b0bab (Cleaner UI, remove extras.js)
 | Source code | https://github.com/PrudenceMatrix/mandate-agent                                                |
 | License     | MIT                                                                                            |
 
