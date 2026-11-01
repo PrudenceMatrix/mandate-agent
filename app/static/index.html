@@ -294,7 +294,8 @@
             </div>
             <div id="grid" class="g"></div>
         </div>
-    </main>
+    <div id="extras"></div>
+</main>
     <script>
         const $ = id => document.getElementById(id), usd = c => '$' + (c / 100).toFixed(2);
         function el(t, c, x) { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e }
@@ -356,6 +357,7 @@
         if (msgs[q]) { $('banner').append(el('div', 'banner ' + msgs[q][1], msgs[q][0])); history.replaceState(null, '', '/') }
         refresh();
     </script>
+<script src="/static/extras.js"></script>
 </body>
 
 </html>

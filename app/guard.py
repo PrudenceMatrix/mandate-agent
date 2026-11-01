@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 from .catalog import MERCHANTS, PRODUCTS
 from .models import Decision, Mandate, Proposal
@@ -11,6 +12,8 @@ HARD_INJECTION = [
     r"\bsystem\s+prompt\b",
     r"(send|transfer|route|redirect)\s+(the\s+)?(payment|money|funds)\s+to",
     r"pre-?approved",
+    r"you\s+are\s+now\s+(in\s+)?(an?\s+)?(admin|administrator|developer|root|unrestricted|jailbroken)",
+    r"do\s+not\s+(tell|inform|notify|alert)\s+(the\s+)?(user|owner|buyer)",
 ]
 SOFT_INJECTION = [r"[\w.+-]+@[\w-]+\.[\w.-]+"]
 
@@ -19,7 +22,15 @@ def fmt(cents: int) -> str:
     return f"${cents / 100:,.2f}"
 
 
+def normalize(text: str) -> str:
+    """Defeat obfuscation: fold full-width and compatibility characters, drop invisible/format chars."""
+    text = unicodedata.normalize("NFKC", text)
+    text = "".join(ch for ch in text if ch.isspace() or unicodedata.category(ch)[0] != "C")
+    return re.sub(r"\s+", " ", text)
+
+
 def scan_listing(text: str) -> tuple[list[str], list[str]]:
+    text = normalize(text)
     hard = [m.group(0) for p in HARD_INJECTION if (m := re.search(p, text, re.I))]
     soft = [m.group(0) for p in SOFT_INJECTION if (m := re.search(p, text, re.I))]
     return hard, soft
@@ -39,6 +50,8 @@ def evaluate(mandate: Mandate, proposal: Proposal, products=None, merchants=None
         hard.append(f"Quantity {proposal.quantity} is outside the allowed range 1-5")
 
     total = product.price_cents * proposal.quantity
+    if total <= 0:
+        hard.append("Total must be greater than zero")
     if proposal.claimed_total_cents != total:
         hard.append(f"Agent claimed {fmt(proposal.claimed_total_cents)} "
                     f"but catalog total is {fmt(total)}")

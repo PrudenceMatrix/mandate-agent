@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from . import db, paypal
 from .catalog import MERCHANTS, PRODUCTS
-from .guard import evaluate
+from .assess import assess
 from .models import Mandate, Proposal
 
 load_dotenv()
@@ -63,7 +63,7 @@ def propose(goal: str, args: dict):
         claimed = round(float(args.get("claimed_total_usd", 0)) * 100)
     except (TypeError, ValueError):
         return {"verdict": "BLOCK", "reasons": ["Malformed proposal"]}, None
-    d = evaluate(current_mandate(), Proposal(pid, qty, claimed))
+    d = assess(current_mandate(), Proposal(pid, qty, claimed))
     p = PRODUCTS.get(pid)
     row = dict(goal=goal, product_id=pid, product=p.title if p else "?", quantity=qty,
                claimed_cents=claimed, total_cents=d.total_cents, merchant_id=d.merchant_id,

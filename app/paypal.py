@@ -1,14 +1,17 @@
-import os, uuid, requests
+import os
+import uuid
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 BASE = "https://api-m.sandbox.paypal.com"
-AUTH = (os.environ["PAYPAL_CLIENT_ID"], os.environ["PAYPAL_CLIENT_SECRET"])
 APP_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 
 def _headers():
-    r = requests.post(f"{BASE}/v1/oauth2/token", auth=AUTH,
+    auth = (os.environ["PAYPAL_CLIENT_ID"], os.environ["PAYPAL_CLIENT_SECRET"])
+    r = requests.post(f"{BASE}/v1/oauth2/token", auth=auth,
                       data={"grant_type": "client_credentials"}, timeout=30)
     r.raise_for_status()
     return {"Authorization": f"Bearer {r.json()['access_token']}",
@@ -35,4 +38,26 @@ def create_order(total_cents: int, description: str):
 def capture_order(order_id: str):
     r = requests.post(f"{BASE}/v2/checkout/orders/{order_id}/capture",
                       headers=_headers(), json={}, timeout=30)
-    return r.ok, r.json()
+    try:
+        data = r.json()
+    except ValueError:
+        data = {}
+    if not r.ok and any(d.get("issue") == "ORDER_ALREADY_CAPTURED" for d in data.get("details", [])):
+        return True, {"status": "COMPLETED"}  # a webhook or a double redirect got there first
+    return r.ok, data
+
+
+def verify_webhook(headers: dict, event: dict) -> bool:
+    """Ask PayPal to verify the signature of a webhook delivery (sandbox)."""
+    webhook_id = os.getenv("PAYPAL_WEBHOOK_ID")
+    body = {"auth_algo": headers.get("paypal-auth-algo"),
+            "cert_url": headers.get("paypal-cert-url"),
+            "transmission_id": headers.get("paypal-transmission-id"),
+            "transmission_sig": headers.get("paypal-transmission-sig"),
+            "transmission_time": headers.get("paypal-transmission-time"),
+            "webhook_id": webhook_id, "webhook_event": event}
+    if not webhook_id or not all(v for k, v in body.items() if k != "webhook_event"):
+        return False
+    r = requests.post(f"{BASE}/v1/notifications/verify-webhook-signature",
+                      headers=_headers(), json=body, timeout=30)
+    return r.ok and r.json().get("verification_status") == "SUCCESS"
